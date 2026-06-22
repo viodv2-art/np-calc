@@ -55,7 +55,15 @@ jobs:
 
       - name: Build Tauri (direct, verbose)
         shell: bash
-        run: npm run tauri:build -- ${{ matrix.args }} --verbose
+        env:
+          TAURI_ARGS: ${{ matrix.args }}
+        run: |
+          set -x
+          if [ -n "$TAURI_ARGS" ]; then
+            npm run tauri:build -- --verbose $TAURI_ARGS
+          else
+            npm run tauri:build -- --verbose
+          fi
 
       - name: List bundle output
         if: always()
