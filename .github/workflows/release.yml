@@ -28,7 +28,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Install Rust (stable)
@@ -42,7 +42,16 @@ jobs:
           workspaces: './src-tauri -> target'
 
       - name: Install npm deps
-        run: npm ci
+        run: npm install --no-audit --no-fund
+
+      - name: Verify Tauri CLI
+        shell: bash
+        run: |
+          npx --no-install tauri --version || {
+            echo "Tauri CLI missing — reinstalling platform binary"
+            npm install --no-save @tauri-apps/cli
+            npx --no-install tauri --version
+          }
 
       - name: Build & bundle
         uses: tauri-apps/tauri-action@v0
