@@ -1,6 +1,6 @@
 [package]
 name = "np-calculator"
-version = "0.2.0"
+version = "0.3.0"
 description = "Калькулятор выбросов НП из ж/д цистерн"
 edition = "2021"
 rust-version = "1.77"

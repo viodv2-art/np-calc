@@ -1,3 +1,5 @@
+import { intensitiesAt } from './intensityTable'
+
 export type WindModel = 'linear' | 'sqrt' | 'gost' | 'manual'
 
 export function windCoefficient(v: number, model: WindModel, manual: number): number {
@@ -37,21 +39,50 @@ export interface CalcBreakdown {
   Mvybr: number
   N: number
   Msum: number
-  factor: number
-  cFactor: number
-  zFactor: number
+  kt: number
+  qp: number
+  qc: number
+  qz: number
+  zSaturation: number
+  zTail: number
+  interpolated: boolean
+  clamped: boolean
 }
 
+// Расчёт по табличным интенсивностям (Приложение Д).
+// Время этапов tp/tc/tz — в минутах. q_* — кг/мин.
+// M_п = q_п · t_п
+// M_с = q_с · t_с
+// M_з = (q_з / 0.16) · (1 − e^(−0.16·t_з)) + 1.05·10⁻⁴ · t_з    (формула 2.35, насыщение)
+// M_выбр = (M_п + M_с + M_з) · K(v)
+// M_sum = N · M_выбр
 export function calcMvybr({ t, tp, tc, tz, K, N }: CalcInput): CalcBreakdown {
-  const factor = Math.exp(0.06 * (t - 25))
-  const Mp = 0.023 * factor * tp
-  const cFactor = 0.23 / 2 + 0.01133
-  const Mc = cFactor * factor * tc
-  const zFactor = (0.01133 * factor) / 0.16
-  const Mz = zFactor * (1 - Math.exp(-0.16 * tz)) + 1.05e-4 * tz
+  const { kt, qp, qc, qz, interpolated, clamped } = intensitiesAt(t)
+  const Mp = qp * tp
+  const Mc = qc * tc
+  const zSaturation = (qz / 0.16) * (1 - Math.exp(-0.16 * tz))
+  const zTail = 1.05e-4 * tz
+  const Mz = zSaturation + zTail
   const Mbase = Mp + Mc + Mz
   const Mvybr = Mbase * K
   const Nsafe = Number.isFinite(N) && N > 0 ? N : 0
   const Msum = Mvybr * Nsafe
-  return { Mp, Mc, Mz, Mbase, K, Mvybr, N: Nsafe, Msum, factor, cFactor, zFactor }
+  return {
+    Mp,
+    Mc,
+    Mz,
+    Mbase,
+    K,
+    Mvybr,
+    N: Nsafe,
+    Msum,
+    kt,
+    qp,
+    qc,
+    qz,
+    zSaturation,
+    zTail,
+    interpolated,
+    clamped,
+  }
 }

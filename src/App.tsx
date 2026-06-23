@@ -1,15 +1,23 @@
 import { useEffect, useMemo, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { calcMvybr } from './calc'
 import type { TimeUnit, WindModel } from './calc'
 import { windCoefficient } from './calc'
 import { searchCity, getWeather } from './weather'
 import type { GeoResult } from './weather'
+import { AnimatedNumber } from './AnimatedNumber'
 
 const TIME_UNIT_LABEL: Record<TimeUnit, string> = {
   min: 'мин',
   h: 'ч',
   s: 'с',
 }
+
+const panelMotion = (delay: number) => ({
+  initial: { opacity: 0, y: 18 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const, delay },
+})
 
 const todayIso = () => new Date().toISOString().slice(0, 10)
 
@@ -64,21 +72,27 @@ export default function App() {
   const [weatherLoading, setWeatherLoading] = useState(false)
   const [weatherError, setWeatherError] = useState<string | null>(null)
 
-  const [tp, setTp] = useState<number>(60)
-  const [tc, setTc] = useState<number>(120)
-  const [tz, setTz] = useState<number>(60)
-  const [N, setN] = useState<number>(1)
+  const [tp, setTp] = useState<number | ''>(60)
+  const [tc, setTc] = useState<number | ''>(120)
+  const [tz, setTz] = useState<number | ''>(60)
+  const [N, setN] = useState<number | ''>(1)
   const [timeUnit, setTimeUnit] = useState<TimeUnit>('min')
 
   const [windModel, setWindModel] = useState<WindModel>('linear')
+  const [showBreakdown, setShowBreakdown] = useState(false)
   const [manualK, setManualK] = useState<number>(1)
 
   const handleCitySearch = async () => {
     setSearching(true)
     try {
       const res = await searchCity(cityQuery)
-      setCityOptions(res)
-      if (res.length === 1) setCity(res[0])
+      if (res.length === 1) {
+        setCity(res[0])
+        setCityQuery(res[0].name)
+        setCityOptions([])
+      } else {
+        setCityOptions(res)
+      }
     } catch {
       setCityOptions([])
     } finally {
@@ -135,22 +149,36 @@ export default function App() {
 
   const result = useMemo(() => {
     if (typeof t !== 'number') return null
-    return calcMvybr({ t, tp, tc, tz, K, N })
-  }, [t, tp, tc, tz, K, N])
+    const num = (v: number | '') => (typeof v === 'number' ? v : 0)
+    const toMin = (v: number) => (timeUnit === 'min' ? v : timeUnit === 'h' ? v * 60 : v / 60)
+    return calcMvybr({
+      t,
+      tp: toMin(num(tp)),
+      tc: toMin(num(tc)),
+      tz: toMin(num(tz)),
+      K,
+      N: num(N),
+    })
+  }, [t, tp, tc, tz, K, N, timeUnit])
 
   return (
     <div className="min-h-screen text-slate-900">
       <div className="mx-auto max-w-3xl px-4 py-8">
-        <header className="mb-8">
+        <motion.header
+          className="mb-8 text-center"
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: 'easeOut' }}
+        >
           <h1 className="text-2xl font-semibold tracking-tight">
             Калькулятор выбросов НП из ж/д цистерн
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Формула 2.36 (Кузьмин). Температура и ветер — MET Norway / wttr.in. K(v) — поправка на ветер.
-          </p>
-        </header>
+        </motion.header>
 
-        <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <motion.section
+          className="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+          {...panelMotion(0.05)}
+        >
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 mb-3">
             Локация и дата
           </h2>
@@ -163,13 +191,27 @@ export default function App() {
                 onChange={(e) => setCityQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleCitySearch()}
               />
-              <button
+              <motion.button
                 onClick={handleCitySearch}
                 className="ctl-btn shrink-0"
                 disabled={searching}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 17 }}
               >
-                {searching ? '…' : 'Найти'}
-              </button>
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.span
+                    key={searching ? 'loading' : 'idle'}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.15 }}
+                    className="inline-block"
+                  >
+                    {searching ? '…' : 'Найти'}
+                  </motion.span>
+                </AnimatePresence>
+              </motion.button>
             </div>
             <input
               type="date"
@@ -179,27 +221,44 @@ export default function App() {
             />
           </div>
 
-          {cityOptions.length > 1 && (
-            <div className="mt-3 grid gap-1">
-              {cityOptions.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => setCity(c)}
-                  className={`text-left rounded px-3 py-2 text-sm border ${
-                    city?.id === c.id
-                      ? 'border-slate-900 bg-slate-100'
-                      : 'border-slate-200 hover:bg-slate-50'
-                  }`}
-                >
-                  <span className="font-medium">{c.name}</span>
-                  <span className="text-slate-500">
-                    {c.admin1 ? `, ${c.admin1}` : ''}
-                    {c.country ? `, ${c.country}` : ''}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
+          <AnimatePresence initial={false}>
+            {cityOptions.length > 1 && (
+              <motion.div
+                className="mt-3 grid gap-1 overflow-hidden"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}
+              >
+                {cityOptions.map((c, i) => (
+                  <motion.button
+                    key={c.id}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.04 * i, duration: 0.22 }}
+                    whileHover={{ scale: 1.01, backgroundColor: 'rgb(241 245 249)' }}
+                    whileTap={{ scale: 0.99 }}
+                    onClick={() => {
+                      setCity(c)
+                      setCityQuery(c.name)
+                      setCityOptions([])
+                    }}
+                    className={`text-left rounded px-3 py-2 text-sm border ${
+                      city?.id === c.id
+                        ? 'border-slate-900 bg-slate-100'
+                        : 'border-slate-200'
+                    }`}
+                  >
+                    <span className="font-medium">{c.name}</span>
+                    <span className="text-slate-500">
+                      {c.admin1 ? `, ${c.admin1}` : ''}
+                      {c.country ? `, ${c.country}` : ''}
+                    </span>
+                  </motion.button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {city && (
             <div className="mt-3 text-xs text-slate-500">
@@ -242,9 +301,12 @@ export default function App() {
               обновить погоду
             </button>
           )}
-        </section>
+        </motion.section>
 
-        <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <motion.section
+          className="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+          {...panelMotion(0.12)}
+        >
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
               Время этапов и количество цистерн
@@ -267,25 +329,28 @@ export default function App() {
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Field label={`t_п, ${TIME_UNIT_LABEL[timeUnit]}`} hint="подготовка">
-              <NumberInput value={tp} onChange={(v) => setTp(typeof v === 'number' ? v : 0)} step={1} />
+              <NumberInput value={tp} onChange={setTp} step={1} />
             </Field>
             <Field label={`t_с, ${TIME_UNIT_LABEL[timeUnit]}`} hint="слив">
-              <NumberInput value={tc} onChange={(v) => setTc(typeof v === 'number' ? v : 0)} step={1} />
+              <NumberInput value={tc} onChange={setTc} step={1} />
             </Field>
             <Field label={`t_з, ${TIME_UNIT_LABEL[timeUnit]}`} hint="заключительный">
-              <NumberInput value={tz} onChange={(v) => setTz(typeof v === 'number' ? v : 0)} step={1} />
+              <NumberInput value={tz} onChange={setTz} step={1} />
             </Field>
             <Field label="N, цистерн" hint="за период">
-              <NumberInput value={N} onChange={(v) => setN(typeof v === 'number' ? v : 0)} step={1} />
+              <NumberInput value={N} onChange={setN} step={1} />
             </Field>
           </div>
           <div className="mt-2 text-xs text-slate-400">
             Время подставляется в формулу как есть, без пересчёта. Сверяйте с источником, в каких единицах
             калиброваны коэффициенты (0.023, 0.01133, 0.16, 1.05·10⁻⁴).
           </div>
-        </section>
+        </motion.section>
 
-        <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <motion.section
+          className="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+          {...panelMotion(0.19)}
+        >
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 mb-3">
             Поправка на ветер K(v)
           </h2>
@@ -306,67 +371,124 @@ export default function App() {
               label={windModel === 'manual' ? 'K вручную' : 'K (расчётный)'}
               hint={windModel === 'manual' ? undefined : `при v=${typeof wind === 'number' ? wind : 0} м/с`}
             >
-              {windModel === 'manual' ? (
-                <NumberInput
-                  value={manualK}
-                  onChange={(v) => setManualK(typeof v === 'number' ? v : 1)}
-                  step={0.05}
-                />
-              ) : (
-                <div className="ctl-readonly">{fmt(K, 3)}</div>
-              )}
+              <AnimatePresence mode="wait" initial={false}>
+                {windModel === 'manual' ? (
+                  <motion.div
+                    key="manual"
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.18 }}
+                  >
+                    <NumberInput
+                      value={manualK}
+                      onChange={(v) => setManualK(typeof v === 'number' ? v : 1)}
+                      step={0.05}
+                    />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key={`computed-${windModel}-${K.toFixed(3)}`}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.18 }}
+                    className="ctl-readonly"
+                  >
+                    {fmt(K, 3)}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </Field>
           </div>
-        </section>
+        </motion.section>
 
-        <section className="rounded-lg border border-slate-900 bg-slate-900 p-5 text-white shadow-sm">
+        <motion.section
+          className="rounded-lg border border-slate-900 bg-slate-900 p-5 text-white shadow-sm"
+          {...panelMotion(0.26)}
+        >
           <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
             Суммарные выбросы M_sum (N цистерн × M_выбр × K)
           </h2>
           <div className="text-4xl font-semibold font-mono">
-            {result ? `${fmt(result.Msum, 4)} кг` : '—'}
+            {result ? (
+              <AnimatedNumber value={result.Msum} digits={4} suffix="кг" />
+            ) : (
+              '—'
+            )}
           </div>
           <div className="mt-1 text-xs text-slate-400">
             на одну цистерну: {result ? `${fmt(result.Mvybr, 4)} кг` : '—'}
           </div>
-          <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
-            <Stat label="M_п" value={result ? fmt(result.Mp) : '—'} />
-            <Stat label="M_с" value={result ? fmt(result.Mc) : '—'} />
-            <Stat label="M_з" value={result ? fmt(result.Mz) : '—'} />
-            <Stat label="K" value={result ? fmt(result.K, 3) : '—'} />
-            <Stat label="N" value={result ? String(result.N) : '—'} />
-          </div>
           {result && (
-            <div className="mt-4 border-t border-slate-700 pt-3 text-xs text-slate-300 font-mono leading-relaxed space-y-0.5">
-              <div>
-                t_п = {tp} {TIME_UNIT_LABEL[timeUnit]}, t_с = {tc} {TIME_UNIT_LABEL[timeUnit]}, t_з ={' '}
-                {tz} {TIME_UNIT_LABEL[timeUnit]}
-              </div>
-              <div>e^(0.06·(t−25)) = {fmt(result.factor, 4)}</div>
-              <div>M_п = 0.023 · factor · t_п = {fmt(result.Mp, 4)}</div>
-              <div>
-                M_с = {fmt(result.cFactor, 5)} · factor · t_с = {fmt(result.Mc, 4)}
-              </div>
-              <div>
-                M_з = {fmt(result.zFactor, 4)} · (1 − e^(−0.16·t_з)) + 1.05·10⁻⁴·t_з ={' '}
-                {fmt(result.Mz, 4)}
-              </div>
-              <div>M_выбр (без K) = M_п + M_с + M_з = {fmt(result.Mbase, 4)} кг</div>
-              <div>
-                M_выбр × K = {fmt(result.Mbase, 4)} × {fmt(result.K, 3)} = {fmt(result.Mvybr, 4)} кг
-              </div>
-              <div>
-                M_sum = N · M_выбр = {result.N} × {fmt(result.Mvybr, 4)} ={' '}
-                <span className="text-white">{fmt(result.Msum, 4)} кг</span>
-              </div>
+            <div className="mt-4 border-t border-slate-700 pt-3">
+              <button
+                onClick={() => setShowBreakdown((v) => !v)}
+                className="text-xs text-slate-400 hover:text-slate-200 inline-flex items-center gap-1"
+              >
+                <motion.span
+                  animate={{ rotate: showBreakdown ? 90 : 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="inline-block"
+                >
+                  ▸
+                </motion.span>
+                {showBreakdown ? 'скрыть формулы' : 'показать формулы'}
+              </button>
+              <AnimatePresence initial={false}>
+                {showBreakdown && (
+                  <motion.div
+                    key="breakdown"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.25, ease: 'easeOut' }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mt-3 text-xs text-slate-300 font-mono leading-relaxed space-y-0.5">
+                      <div>
+                        t = {typeof t === 'number' ? t : '—'} °C
+                        {result.interpolated ? ' (интерполяция)' : ''}
+                        {result.clamped ? ' (вне табл. диапазона −30…+30, ограничено)' : ''}
+                      </div>
+                      <div>
+                        K_t = {fmt(result.kt, 4)}, q_п = {fmt(result.qp, 5)} кг/мин,
+                        q_с = {fmt(result.qc, 6)} кг/мин, q_з = {result.qz.toExponential(3)} кг/мин
+                      </div>
+                      <div>
+                        t_п = {tp} {TIME_UNIT_LABEL[timeUnit]}, t_с = {tc} {TIME_UNIT_LABEL[timeUnit]},
+                        t_з = {tz} {TIME_UNIT_LABEL[timeUnit]}
+                      </div>
+                      <div>M_п = q_п · t_п = {fmt(result.Mp, 4)}</div>
+                      <div>M_с = q_с · t_с = {fmt(result.Mc, 4)}</div>
+                      <div>
+                        M_з = (q_з/0.16)·(1 − e^(−0.16·t_з)) + 1.05·10⁻⁴·t_з = {fmt(result.Mz, 4)}
+                      </div>
+                      <div>M_выбр (без K) = M_п + M_с + M_з = {fmt(result.Mbase, 4)} кг</div>
+                      <div>
+                        M_выбр × K = {fmt(result.Mbase, 4)} × {fmt(result.K, 3)} ={' '}
+                        {fmt(result.Mvybr, 4)} кг
+                      </div>
+                      <div>
+                        M_sum = N · M_выбр = {result.N} × {fmt(result.Mvybr, 4)} ={' '}
+                        <span className="text-white">{fmt(result.Msum, 4)} кг</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
-        </section>
+        </motion.section>
 
-        <footer className="mt-8 text-xs text-slate-400">
-          Погода: MET Norway (api.met.no) основной, wttr.in запасной — оба бесплатные, без ключа,
-          доступны из РФ. Геокодинг — Open-Meteo. Прогноз до ~9 дней вперёд.
-        </footer>
+        <motion.footer
+          className="mt-8 text-xs text-slate-400 space-y-2 text-center"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.4, delay: 0.4 }}
+        >
+          <div className="text-slate-500">© Кузьмин Олег Сергеевич, г. Хабаровск, 2026</div>
+        </motion.footer>
       </div>
     </div>
   )
@@ -416,11 +538,3 @@ function NumberInput({
   )
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-xs text-slate-400">{label}</div>
-      <div className="font-mono">{value}</div>
-    </div>
-  )
-}

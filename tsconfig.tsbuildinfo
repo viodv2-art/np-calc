@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/calc.ts","./src/main.tsx","./src/weather.ts"],"version":"5.9.3"}
+{"root":["./src/animatednumber.tsx","./src/app.tsx","./src/calc.ts","./src/intensitytable.ts","./src/main.tsx","./src/weather.ts"],"version":"5.9.3"}

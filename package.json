@@ -1,7 +1,7 @@
 {
   "name": "np-calculator",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,18 +12,19 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
+    "framer-motion": "^12.40.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "optionalDependencies": {
-    "@tauri-apps/cli-darwin-arm64": "^2.11.3",
-    "@tauri-apps/cli-darwin-x64": "^2.11.3",
-    "@tauri-apps/cli-linux-x64-gnu": "^2.11.3",
-    "@tauri-apps/cli-win32-x64-msvc": "^2.11.3",
     "@rollup/rollup-darwin-arm64": "^4.62.2",
     "@rollup/rollup-darwin-x64": "^4.62.2",
     "@rollup/rollup-linux-x64-gnu": "^4.62.2",
-    "@rollup/rollup-win32-x64-msvc": "^4.62.2"
+    "@rollup/rollup-win32-x64-msvc": "^4.62.2",
+    "@tauri-apps/cli-darwin-arm64": "^2.11.3",
+    "@tauri-apps/cli-darwin-x64": "^2.11.3",
+    "@tauri-apps/cli-linux-x64-gnu": "^2.11.3",
+    "@tauri-apps/cli-win32-x64-msvc": "^2.11.3"
   },
   "devDependencies": {
     "@tauri-apps/api": "^2.11.1",

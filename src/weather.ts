@@ -17,8 +17,6 @@ const GEO_URL = 'https://geocoding-api.open-meteo.com/v1/search'
 const METNO_URL = 'https://api.met.no/weatherapi/locationforecast/2.0/compact'
 const WTTR_URL = 'https://wttr.in'
 
-const UA = 'np-calculator/0.2 github.com/viodv2-art/np-calc'
-
 export async function searchCity(query: string): Promise<GeoResult[]> {
   if (!query.trim()) return []
   const url = `${GEO_URL}?name=${encodeURIComponent(query)}&count=8&language=ru&format=json`
@@ -30,7 +28,7 @@ export async function searchCity(query: string): Promise<GeoResult[]> {
 
 async function fetchMetno(lat: number, lon: number, isoDate: string): Promise<WeatherData> {
   const url = `${METNO_URL}?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`
-  const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } })
+  const r = await fetch(url, { headers: { Accept: 'application/json' } })
   if (!r.ok) throw new Error(`met.no http ${r.status}`)
   const j = await r.json()
   const series: Array<{
