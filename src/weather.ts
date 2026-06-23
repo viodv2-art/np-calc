@@ -10,12 +10,14 @@ export interface GeoResult {
 export interface WeatherData {
   temperature: number
   windspeed: number
-  source: 'archive' | 'forecast'
+  source: 'metno' | 'wttr'
 }
 
 const GEO_URL = 'https://geocoding-api.open-meteo.com/v1/search'
-const ARCHIVE_URL = 'https://archive-api.open-meteo.com/v1/archive'
-const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast'
+const METNO_URL = 'https://api.met.no/weatherapi/locationforecast/2.0/compact'
+const WTTR_URL = 'https://wttr.in'
+
+const UA = 'np-calculator/0.2 github.com/viodv2-art/np-calc'
 
 export async function searchCity(query: string): Promise<GeoResult[]> {
   if (!query.trim()) return []
@@ -26,36 +28,74 @@ export async function searchCity(query: string): Promise<GeoResult[]> {
   return (j.results ?? []) as GeoResult[]
 }
 
-function avg(arr: (number | null)[]): number {
-  const xs = arr.filter((x): x is number => typeof x === 'number')
-  if (!xs.length) return NaN
-  return xs.reduce((a, b) => a + b, 0) / xs.length
+async function fetchMetno(lat: number, lon: number, isoDate: string): Promise<WeatherData> {
+  const url = `${METNO_URL}?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`
+  const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } })
+  if (!r.ok) throw new Error(`met.no http ${r.status}`)
+  const j = await r.json()
+  const series: Array<{
+    time: string
+    data: { instant: { details: { air_temperature?: number; wind_speed?: number } } }
+  }> = j?.properties?.timeseries ?? []
+  if (!series.length) throw new Error('met.no empty timeseries')
+
+  const dayPoints = series.filter((p) => p.time.startsWith(isoDate))
+  const pool = dayPoints.length ? dayPoints : series.slice(0, 8)
+  const temps: number[] = []
+  const winds: number[] = []
+  for (const p of pool) {
+    const d = p.data?.instant?.details
+    if (typeof d?.air_temperature === 'number') temps.push(d.air_temperature)
+    if (typeof d?.wind_speed === 'number') winds.push(d.wind_speed)
+  }
+  if (!temps.length || !winds.length) throw new Error('met.no missing details')
+  const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length
+  return {
+    temperature: +avg(temps).toFixed(1),
+    windspeed: +avg(winds).toFixed(1),
+    source: 'metno',
+  }
 }
 
-export async function getWeather(
-  lat: number,
-  lon: number,
-  isoDate: string,
-): Promise<WeatherData> {
-  const today = new Date().toISOString().slice(0, 10)
-  const target = isoDate
-  const useArchive = target < today
-  const base = useArchive ? ARCHIVE_URL : FORECAST_URL
-  const url =
-    `${base}?latitude=${lat}&longitude=${lon}` +
-    `&start_date=${target}&end_date=${target}` +
-    `&hourly=temperature_2m,windspeed_10m&timezone=auto`
-  const r = await fetch(url)
-  if (!r.ok) throw new Error('weather fetch failed')
+async function fetchWttr(lat: number, lon: number, isoDate: string): Promise<WeatherData> {
+  const url = `${WTTR_URL}/${lat.toFixed(4)},${lon.toFixed(4)}?format=j1`
+  const r = await fetch(url, { headers: { Accept: 'application/json' } })
+  if (!r.ok) throw new Error(`wttr.in http ${r.status}`)
   const j = await r.json()
-  const temps = (j.hourly?.temperature_2m ?? []) as (number | null)[]
-  const winds = (j.hourly?.windspeed_10m ?? []) as (number | null)[]
-  const t = avg(temps)
-  const wKmh = avg(winds)
-  const wMs = wKmh / 3.6
+  const days: Array<{
+    date: string
+    hourly: Array<{ tempC: string; windspeedKmph: string }>
+  }> = j?.weather ?? []
+  if (!days.length) throw new Error('wttr.in empty')
+
+  const day = days.find((d) => d.date === isoDate) ?? days[0]
+  const temps: number[] = []
+  const winds: number[] = []
+  for (const h of day.hourly ?? []) {
+    const t = Number(h.tempC)
+    const wKmh = Number(h.windspeedKmph)
+    if (Number.isFinite(t)) temps.push(t)
+    if (Number.isFinite(wKmh)) winds.push(wKmh / 3.6)
+  }
+  if (!temps.length || !winds.length) throw new Error('wttr.in missing values')
+  const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length
   return {
-    temperature: Number.isFinite(t) ? +t.toFixed(1) : NaN,
-    windspeed: Number.isFinite(wMs) ? +wMs.toFixed(1) : NaN,
-    source: useArchive ? 'archive' : 'forecast',
+    temperature: +avg(temps).toFixed(1),
+    windspeed: +avg(winds).toFixed(1),
+    source: 'wttr',
+  }
+}
+
+export async function getWeather(lat: number, lon: number, isoDate: string): Promise<WeatherData> {
+  try {
+    return await fetchMetno(lat, lon, isoDate)
+  } catch (e) {
+    try {
+      return await fetchWttr(lat, lon, isoDate)
+    } catch (e2) {
+      throw new Error(
+        `оба источника недоступны: met.no (${e instanceof Error ? e.message : 'err'}), wttr.in (${e2 instanceof Error ? e2.message : 'err'})`,
+      )
+    }
   }
 }

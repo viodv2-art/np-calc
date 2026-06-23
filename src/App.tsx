@@ -60,7 +60,7 @@ export default function App() {
 
   const [t, setT] = useState<number | ''>('')
   const [wind, setWind] = useState<number | ''>('')
-  const [weatherSource, setWeatherSource] = useState<'archive' | 'forecast' | null>(null)
+  const [weatherSource, setWeatherSource] = useState<'metno' | 'wttr' | null>(null)
   const [weatherLoading, setWeatherLoading] = useState(false)
   const [weatherError, setWeatherError] = useState<string | null>(null)
 
@@ -146,7 +146,7 @@ export default function App() {
             Калькулятор выбросов НП из ж/д цистерн
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Формула 2.36 (Кузьмин). Температура и ветер — Open-Meteo. K(v) — поправка на ветер.
+            Формула 2.36 (Кузьмин). Температура и ветер — MET Norway / wttr.in. K(v) — поправка на ветер.
           </p>
         </header>
 
@@ -218,9 +218,9 @@ export default function App() {
                   : weatherError
                     ? weatherError
                     : weatherSource
-                      ? weatherSource === 'archive'
-                        ? 'из архива Open-Meteo'
-                        : 'прогноз Open-Meteo'
+                      ? weatherSource === 'metno'
+                        ? 'MET Norway (yr.no)'
+                        : 'wttr.in (fallback)'
                       : undefined
               }
             >
@@ -364,8 +364,8 @@ export default function App() {
         </section>
 
         <footer className="mt-8 text-xs text-slate-400">
-          Источник погоды: Open-Meteo (open-meteo.com), без API-ключа. Архив до вчера, прогноз —
-          с сегодня.
+          Погода: MET Norway (api.met.no) основной, wttr.in запасной — оба бесплатные, без ключа,
+          доступны из РФ. Геокодинг — Open-Meteo. Прогноз до ~9 дней вперёд.
         </footer>
       </div>
     </div>
